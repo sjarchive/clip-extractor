@@ -1,1 +1,77 @@
+# Save this as .github/workflows/extract-clip.yml in your repo.
+#
+# Usage:
+#   1. Edit clip-config.json (in repo root) with the source URL and timestamps.
+#   2. Push that change (or run the workflow manually from the Actions tab
+#      and it will read whatever is currently committed in clip-config.json).
+#   3. The clip is uploaded straight to your Cloudflare R2 bucket — no need
+#      to download it from the Actions UI.
+#
+# clip-config.json format:
+# {
+#   "url": "https://example.com/path/to/video.mkv",
+#   "start": "00:10:00",
+#   "duration": "00:10:00",
+#   "output": "clip.mkv"
+# }
+#
+# One-time setup before this workflow will work:
+#   1. In the Cloudflare dashboard, go to R2 and create a bucket
+#      (e.g. "clips").
+#   2. R2 -> Manage API Tokens -> Create API Token -> permission
+#      "Object Read & Write", scoped to that bucket. Copy the Access Key ID
+#      and Secret Access Key it gives you (shown once).
+#   3. Note your Cloudflare Account ID (right sidebar of the R2 dashboard).
+#   4. In your GitHub repo: Settings -> Secrets and variables -> Actions,
+#      add these repository secrets:
+#        R2_ACCOUNT_ID       = your Cloudflare account ID
+#        R2_ACCESS_KEY_ID    = the access key from step 2
+#        R2_SECRET_ACCESS_KEY = the secret key from step 2
+#        R2_BUCKET           = the bucket name, e.g. "clips"
 
+name: Extract Clip from MKV
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - 'clip-config.json'
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Read config
+        id: cfg
+        run: |
+          echo "url=$(jq -r .url clip-config.json)" >> "$GITHUB_OUTPUT"
+          echo "start=$(jq -r .start clip-config.json)" >> "$GITHUB_OUTPUT"
+          echo "duration=$(jq -r .duration clip-config.json)" >> "$GITHUB_OUTPUT"
+          echo "output=$(jq -r .output clip-config.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Extract clip with ffmpeg
+        run: |
+          ffmpeg -ss "${{ steps.cfg.outputs.start }}" \
+                 -i "${{ steps.cfg.outputs.url }}" \
+                 -t "${{ steps.cfg.outputs.duration }}" \
+                 -map 0 -c copy -avoid_negative_ts make_zero \
+                 "${{ steps.cfg.outputs.output }}"
+
+      - name: Upload clip to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 cp "${{ steps.cfg.outputs.output }}" \
+            "s3://${{ secrets.R2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+
+      - name: Print result
+        run: |
+          echo "Uploaded to R2 bucket: ${{ secrets.R2_BUCKET }}"
+          echo "Object key: ${{ steps.cfg.outputs.output }}"
+          echo "(Generate a signed/public URL from the Cloudflare dashboard or a Worker if you need to share it.)"
