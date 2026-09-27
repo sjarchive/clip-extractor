@@ -1,0 +1,6 @@
+{
+  "url": "https://example.com/path/to/video.mkv",
+  "start": "00:10:00",
+  "duration": "00:10:00",
+  "output": "clip.mkv"
+}
