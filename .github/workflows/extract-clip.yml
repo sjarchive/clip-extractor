@@ -84,6 +84,11 @@ jobs:
           URL=$(aws s3 presign "s3://${{ secrets.B2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
             --endpoint-url "https://${{ secrets.B2_ENDPOINT }}" \
             --expires-in 604800)
+          if [ -z "$URL" ]; then
+            echo "ERROR: presign returned an empty URL. Check bucket name, endpoint, and key permissions."
+            exit 1
+          fi
+          echo "Generated URL: $URL"
           echo "### Clip ready" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "[Download ${{ steps.cfg.outputs.output }}]($URL)" >> "$GITHUB_STEP_SUMMARY"
