@@ -52,6 +52,9 @@ jobs:
           echo "duration=$(jq -r .duration clip-config.json)" >> "$GITHUB_OUTPUT"
           echo "output=$(jq -r .output clip-config.json)" >> "$GITHUB_OUTPUT"
 
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Extract clip with ffmpeg
         run: |
           ffmpeg -ss "${{ steps.cfg.outputs.start }}" \
