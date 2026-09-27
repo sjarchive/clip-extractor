@@ -4,8 +4,9 @@
 #   1. Edit clip-config.json (in repo root) with the source URL and timestamps.
 #   2. Push that change (or run the workflow manually from the Actions tab
 #      and it will read whatever is currently committed in clip-config.json).
-#   3. The clip is uploaded straight to your Backblaze B2 bucket — no need
-#      to download it from the Actions UI.
+#   3. The clip is uploaded to your Backblaze B2 bucket, and a temporary
+#      download link (valid 7 days) is printed on the workflow run's
+#      Summary page in GitHub — no need to log into Backblaze to get it.
 #
 # clip-config.json format:
 # {
@@ -71,8 +72,17 @@ jobs:
             "s3://${{ secrets.B2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
             --endpoint-url "https://${{ secrets.B2_ENDPOINT }}"
 
-      - name: Print result
+      - name: Generate download link
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          AWS_DEFAULT_REGION: us-east-005
         run: |
-          echo "Uploaded to B2 bucket: ${{ secrets.B2_BUCKET }}"
-          echo "Object key: ${{ steps.cfg.outputs.output }}"
-          echo "(Get a shareable link from the Backblaze dashboard, or use a signed/friend URL if the bucket is private.)"
+          URL=$(aws s3 presign "s3://${{ secrets.B2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
+            --endpoint-url "https://${{ secrets.B2_ENDPOINT }}" \
+            --expires-in 604800)
+          echo "### Clip ready" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Download ${{ steps.cfg.outputs.output }}]($URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_Link expires in 7 days._" >> "$GITHUB_STEP_SUMMARY"
