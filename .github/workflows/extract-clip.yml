@@ -4,7 +4,7 @@
 #   1. Edit clip-config.json (in repo root) with the source URL and timestamps.
 #   2. Push that change (or run the workflow manually from the Actions tab
 #      and it will read whatever is currently committed in clip-config.json).
-#   3. The clip is uploaded straight to your Cloudflare R2 bucket — no need
+#   3. The clip is uploaded straight to your Backblaze B2 bucket — no need
 #      to download it from the Actions UI.
 #
 # clip-config.json format:
@@ -15,19 +15,18 @@
 #   "output": "clip.mkv"
 # }
 #
-# One-time setup before this workflow will work:
-#   1. In the Cloudflare dashboard, go to R2 and create a bucket
-#      (e.g. "clips").
-#   2. R2 -> Manage API Tokens -> Create API Token -> permission
-#      "Object Read & Write", scoped to that bucket. Copy the Access Key ID
-#      and Secret Access Key it gives you (shown once).
-#   3. Note your Cloudflare Account ID (right sidebar of the R2 dashboard).
-#   4. In your GitHub repo: Settings -> Secrets and variables -> Actions,
+# One-time setup before this workflow will work (no credit card needed):
+#   1. Sign up at backblaze.com/sign-up, then open B2 Cloud Storage.
+#   2. Buckets -> Create a Bucket -> name it (e.g. "clips") -> set Private.
+#   3. App Keys -> Add a New Application Key -> scope it to that bucket only.
+#      Copy the keyID and applicationKey shown (applicationKey is shown once).
+#   4. On the bucket's page, note its Endpoint, e.g. s3.us-west-002.backblazeb2.com
+#   5. In your GitHub repo: Settings -> Secrets and variables -> Actions,
 #      add these repository secrets:
-#        R2_ACCOUNT_ID       = your Cloudflare account ID
-#        R2_ACCESS_KEY_ID    = the access key from step 2
-#        R2_SECRET_ACCESS_KEY = the secret key from step 2
-#        R2_BUCKET           = the bucket name, e.g. "clips"
+#        B2_KEY_ID           = the keyID from step 3
+#        B2_APPLICATION_KEY  = the applicationKey from step 3
+#        B2_ENDPOINT         = the endpoint from step 4 (no "https://")
+#        B2_BUCKET           = the bucket name, e.g. "clips"
 
 name: Extract Clip from MKV
 
@@ -60,18 +59,20 @@ jobs:
                  -map 0 -c copy -avoid_negative_ts make_zero \
                  "${{ steps.cfg.outputs.output }}"
 
-      - name: Upload clip to Cloudflare R2
+      - name: Upload clip to Backblaze B2
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          # This must match the region code in your bucket's endpoint
+          # (e.g. endpoint "s3.us-east-005.backblazeb2.com" -> region "us-east-005").
+          AWS_DEFAULT_REGION: us-east-005
         run: |
           aws s3 cp "${{ steps.cfg.outputs.output }}" \
-            "s3://${{ secrets.R2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+            "s3://${{ secrets.B2_BUCKET }}/${{ steps.cfg.outputs.output }}" \
+            --endpoint-url "https://${{ secrets.B2_ENDPOINT }}"
 
       - name: Print result
         run: |
-          echo "Uploaded to R2 bucket: ${{ secrets.R2_BUCKET }}"
+          echo "Uploaded to B2 bucket: ${{ secrets.B2_BUCKET }}"
           echo "Object key: ${{ steps.cfg.outputs.output }}"
-          echo "(Generate a signed/public URL from the Cloudflare dashboard or a Worker if you need to share it.)"
+          echo "(Get a shareable link from the Backblaze dashboard, or use a signed/friend URL if the bucket is private.)"
